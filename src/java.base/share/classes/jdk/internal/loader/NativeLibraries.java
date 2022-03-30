@@ -412,12 +412,16 @@ public final class NativeLibraries {
 
         @Override
         public long find(String name) {
+<<<<<<< Upstream, based on upstream/openj9
             boolean isAixOS = System.getProperty("os.name").toLowerCase().contains("aix");
             if (isAixOS) {
                 return NativeLibraries.findEntryInProcess(name);
             } else {
                 throw new UnsupportedOperationException("Cannot find on non-AIX platforms");
             }
+=======
+            return NativeLibraries.findEntryInProcess(name);
+>>>>>>> d7ae209 Implement the CLinker upcall handler of JEP419
         }
 
     };
