@@ -36,13 +36,14 @@ import static jdk.incubator.foreign.ValueLayout.ADDRESS;
 import static sun.security.action.GetPropertyAction.privilegedGetProperty;
 
 public enum CABI {
+    AIX,
+    MacOS,
     SysV,
     Win64,
     LinuxAArch64,
     MacOsAArch64,
     SysVPPC64le,
-    SysVS390x,
-    AIX;
+    SysVS390x;
 
     private static final CABI current;
 
@@ -55,6 +56,8 @@ public enum CABI {
         if ((arch.equals("amd64") || arch.equals("x86_64")) && addressSize == 64) {
             if (os.startsWith("Windows")) {
                 current = Win64;
+            } else if (os.startsWith("Mac")) {
+                current = MacOS;
             } else {
                 current = SysV;
             }

@@ -23,6 +23,12 @@
  * questions.
  */
 
+/*
+ * ===========================================================================
+ * (c) Copyright IBM Corp. 2022, 2022 All Rights Reserved
+ * ===========================================================================
+ */
+
 #include <errno.h>
 #include <string.h>
 
@@ -58,6 +64,10 @@ void buildJniFunctionName(const char *sym, const char *cname,
         strcat(jniEntryName, "_");
         strcat(jniEntryName, cname);
     }
+}
+
+void* findEntryInProcess(const char* name) {
+    return JVM_FindLibraryEntry(RTLD_DEFAULT, name);
 }
 
 JNIEXPORT size_t JNICALL

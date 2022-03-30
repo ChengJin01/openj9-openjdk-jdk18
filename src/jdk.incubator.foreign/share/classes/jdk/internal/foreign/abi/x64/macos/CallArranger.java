@@ -23,14 +23,13 @@
  * questions.
  */
 
-
 /*
  * ===========================================================================
- * (c) Copyright IBM Corp. 2021, 2022 All Rights Reserved
+ * (c) Copyright IBM Corp. 2022, 2022 All Rights Reserved
  * ===========================================================================
  */
 
-package jdk.internal.foreign.abi.s390x.sysv;
+package jdk.internal.foreign.abi.x64.macos;
 
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.NativeSymbol;
@@ -42,7 +41,7 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodType;
 
 /**
- * For the SysV s390 C ABI specifically, this class uses the ProgrammableInvoker API
+ * For the macOS C ABI specifically, this class uses the ProgrammableInvoker API
  * which is turned into a MethodHandle to invoke the native code.
  */
 public class CallArranger {

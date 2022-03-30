@@ -23,6 +23,12 @@
  * questions.
  */
 
+/*
+ * ===========================================================================
+ * (c) Copyright IBM Corp. 2022, 2022 All Rights Reserved
+ * ===========================================================================
+ */
+
 #include <stdlib.h>
 #include <assert.h>
 
@@ -303,4 +309,30 @@ Java_jdk_internal_loader_NativeLibraries_findBuiltinLib
     }
     free(libName);
     return NULL;
+}
+
+/*
+ * Class:     jdk_internal_loader_NativeLibraries
+ * Method:    findEntryInProcess
+ * Signature: (Ljava/lang/String;)J
+ */
+JNIEXPORT jlong JNICALL
+Java_jdk_internal_loader_NativeLibraries_findEntryInProcess
+  (JNIEnv *env, jclass cls, jstring name)
+{
+    const char *cname;
+    jlong res;
+
+    if (!initIDs(env)) {
+        return jlong_zero;
+    }
+
+    cname = (*env)->GetStringUTFChars(env, name, 0);
+    if (0 == cname) {
+        return jlong_zero;
+    }
+
+    res = ptr_to_jlong(findEntryInProcess(cname));
+    (*env)->ReleaseStringUTFChars(env, name, cname);
+    return res;
 }

@@ -38,6 +38,7 @@ import jdk.internal.foreign.abi.aarch64.macos.MacOsAArch64VaList;
 import jdk.internal.foreign.abi.ppc64.aix.AixPPC64VaList;
 import jdk.internal.foreign.abi.ppc64.sysv.SysVPPC64leVaList;
 import jdk.internal.foreign.abi.s390x.sysv.SysVS390xVaList;
+import jdk.internal.foreign.abi.x64.macos.MacOsx64VaList;
 import jdk.internal.foreign.abi.x64.sysv.SysVVaList;
 import jdk.internal.foreign.abi.x64.windows.WinVaList;
 import jdk.internal.reflect.CallerSensitive;
@@ -66,7 +67,9 @@ import java.util.function.Consumer;
  * <p> Unless otherwise specified, passing a {@code null} argument, or an array argument containing one or more {@code null}
  * elements to a method in this class causes a {@link NullPointerException NullPointerException} to be thrown. </p>
  */
-sealed public interface VaList extends Addressable permits WinVaList, SysVVaList, LinuxAArch64VaList, MacOsAArch64VaList, SysVPPC64leVaList, SysVS390xVaList, AixPPC64VaList, SharedUtils.EmptyVaList {
+sealed public interface VaList extends Addressable permits MacOsx64VaList, WinVaList, SysVVaList,
+                                                           LinuxAArch64VaList, MacOsAArch64VaList, SysVPPC64leVaList,
+                                                           SysVS390xVaList, AixPPC64VaList, SharedUtils.EmptyVaList {
 
     /**
      * Reads the next value as an {@code int} and advances this variable argument list's position. The behavior of this
@@ -233,7 +236,9 @@ sealed public interface VaList extends Addressable permits WinVaList, SysVVaList
      * <p> Unless otherwise specified, passing a {@code null} argument, or an array argument containing one or more {@code null}
      * elements to a method in this class causes a {@link NullPointerException NullPointerException} to be thrown. </p>
      */
-    sealed interface Builder permits WinVaList.Builder, SysVVaList.Builder, LinuxAArch64VaList.Builder, MacOsAArch64VaList.Builder, SysVPPC64leVaList.Builder, SysVS390xVaList.Builder, AixPPC64VaList.Builder {
+    sealed interface Builder permits MacOsx64VaList.Builder, WinVaList.Builder, SysVVaList.Builder,
+                                     LinuxAArch64VaList.Builder, MacOsAArch64VaList.Builder,
+                                     SysVPPC64leVaList.Builder, SysVS390xVaList.Builder, AixPPC64VaList.Builder {
 
         /**
          * Writes an {@code int} value to the variable argument list being constructed.
