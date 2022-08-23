@@ -31,118 +31,242 @@
 
 package jdk.internal.foreign.abi.ppc64.sysv;
 
+import java.lang.invoke.VarHandle;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Stream;
+
 import jdk.incubator.foreign.*;
+import jdk.incubator.foreign.ValueLayout;
+import static jdk.incubator.foreign.ValueLayout.*;
+import jdk.internal.foreign.abi.ppc64.TypeClass;
+import jdk.internal.foreign.abi.SharedUtils;
+import jdk.internal.foreign.abi.SharedUtils.SimpleVaArg;
 import jdk.internal.foreign.ResourceScopeImpl;
 import jdk.internal.foreign.Scoped;
-import jdk.internal.foreign.Utils;
-import jdk.internal.foreign.abi.SharedUtils;
 import static jdk.internal.foreign.PlatformLayouts.SysVPPC64le;
 
 /**
- * This file serves as a placeholder for VaList on Linux/ppc64le as the code
- * at Java level is not yet implemented for the moment. Futher analysis on
- * the struct is required to understand how the struct is laid out in memory
- * (e.g. the type & size of each field in va_list) and how the registers are
- * allocated for va_list.
+ * This class implements VaList specific to Linux/ppc64le based on "64-Bit ELF V2 ABI
+ * Specification: Power Architecture"(Revision 1.5), in which case the code is backported
+ * from OpenJDK19 with modifications against the code of VaList on x64/windows as the template.
+ *
+ * va_arg impl on Linux/ppc64le:
+ * typedef void * va_list;
+ *
+ * Specifically, va_list is simply a pointer (similar to the va_list on x64/windows) to a buffer
+ * with all supportted types of arugments, including struct (passed by value), pointer and 
+ * primitive types, which are aligned with 8 bytes.
  */
 public non-sealed class SysVPPC64leVaList implements VaList, Scoped {
-    public static final Class<?> CARRIER = MemoryAddress.class;
+	public static final Class<?> CARRIER = MemoryAddress.class;
 
-    public static VaList empty() {
-        throw new InternalError("empty() is not yet implemented"); //$NON-NLS-1$
-    }
+	/* Every primitive/pointer occupies 8 bytes and structs are aligned
+	 * with 8 bytes in the total size when stacking the va_list buffer. 
+	 */
+	private static final long VA_LIST_SLOT_BYTES = 8;
+	private static final VaList EMPTY = new SharedUtils.EmptyVaList(MemoryAddress.NULL);
 
-    @Override
-    public int nextVarg(ValueLayout.OfInt layout) {
-        throw new InternalError("nextVarg() is not yet implemented"); //$NON-NLS-1$
-    }
+	private MemorySegment segment;
+	private final ResourceScope scope;
 
-    @Override
-    public long nextVarg(ValueLayout.OfLong layout) {
-        throw new InternalError("nextVarg() is not yet implemented"); //$NON-NLS-1$
-    }
+	private SysVPPC64leVaList(MemorySegment segment, ResourceScope scope) {
+		this.segment = segment;
+		this.scope = scope;
+	}
 
-    @Override
-    public double nextVarg(ValueLayout.OfDouble layout) {
-        throw new InternalError("nextVarg() is not yet implemented"); //$NON-NLS-1$
-    }
+	public static final VaList empty() {
+		return EMPTY;
+	}
 
-    @Override
-    public MemoryAddress nextVarg(ValueLayout.OfAddress layout) {
-        throw new InternalError("nextVarg() is not yet implemented"); //$NON-NLS-1$
-    }
+	@Override
+	public int nextVarg(ValueLayout.OfInt layout) {
+		return Math.toIntExact((long)readArg(layout));
+	}
 
-    @Override
-    public MemorySegment nextVarg(GroupLayout layout, SegmentAllocator allocator) {
-        throw new InternalError("nextVarg() is not yet implemented"); //$NON-NLS-1$
-    }
+	@Override
+	public long nextVarg(ValueLayout.OfLong layout) {
+		return (long)readArg(layout);
+	}
 
-    @Override
-    public void skip(MemoryLayout... layouts) {
-        throw new InternalError("skip() is not yet implemented"); //$NON-NLS-1$
-    }
+	@Override
+	public double nextVarg(ValueLayout.OfDouble layout) {
+		return (double)readArg(layout);
+	}
 
-    public static VaList ofAddress(MemoryAddress ma, ResourceScope scope) {
-        throw new InternalError("ofAddress() is not yet implemented"); //$NON-NLS-1$
-    }
+	@Override
+	public MemoryAddress nextVarg(ValueLayout.OfAddress layout) {
+		return (MemoryAddress)readArg(layout);
+	}
 
-    @Override
-    public ResourceScope scope() {
-        throw new InternalError("scope() is not yet implemented"); //$NON-NLS-1$
-    }
+	@Override
+	public MemorySegment nextVarg(GroupLayout layout, SegmentAllocator allocator) {
+		Objects.requireNonNull(allocator);
+		return (MemorySegment)readArg(layout, allocator);
+	}
 
-    @Override
-    public VaList copy() {
-        throw new InternalError("copy() is not yet implemented"); //$NON-NLS-1$
-    }
+	private Object readArg(MemoryLayout argLayout) {
+		return readArg(argLayout, SharedUtils.THROWING_ALLOCATOR);
+	}
 
-    @Override
-    public MemoryAddress address() {
-        throw new InternalError("address() is not yet implemented"); //$NON-NLS-1$
-    }
+	private Object readArg(MemoryLayout argLayout, SegmentAllocator allocator) {
+		Objects.requireNonNull(argLayout);
+		long argByteSize = 0;
+		Object argument = null;
 
-    @Override
-    public String toString() {
-        throw new InternalError("toString() is not yet implemented"); //$NON-NLS-1$
-    }
+		TypeClass typeClass = TypeClass.classifyLayout(argLayout);
+		argByteSize = getAlignedArgSize(argLayout);
 
-    static SysVPPC64leVaList.Builder builder(ResourceScope scope) {
-        return new SysVPPC64leVaList.Builder(scope);
-    }
+		switch (typeClass) {
+			case BASE, POINTER -> {
+				VarHandle argHandle = TypeClass.classifyVarHandle((ValueLayout)argLayout);
+				argument = argHandle.get(segment);
+			}
+			case STRUCT -> {
+				/* Copy the struct argument with the aligned size from the va_list buffer to allocated memory */
+				argument = allocator.allocate(argByteSize).copyFrom(segment.asSlice(0, argByteSize));
+			}
+			default -> throw new IllegalStateException("Unsupported TypeClass: " + typeClass);
+		}
 
-    public static non-sealed class Builder implements VaList.Builder {
+		/* Move to the next argument in the va_list buffer */
+		segment = segment.asSlice(argByteSize);
+		return argument;
+	}
 
-        public Builder(ResourceScope scope) {
-            throw new InternalError("Builder() is not yet implemented"); //$NON-NLS-1$
-        }
+	private static long getAlignedArgSize(MemoryLayout argLayout) {
+		long argLayoutSize = VA_LIST_SLOT_BYTES; // Always aligned with 8 bytes for primitives/pointer by default
 
-        @Override
-        public Builder addVarg(ValueLayout.OfInt layout, int value) {
-            throw new InternalError("addVarg() is not yet implemented"); //$NON-NLS-1$
-        }
+		/* As with primitives, a struct should aligned with 8 bytes */
+		if (argLayout instanceof GroupLayout) {
+			argLayoutSize = argLayout.byteSize();
+			if ((argLayoutSize % VA_LIST_SLOT_BYTES) > 0) {
+				argLayoutSize = (argLayoutSize / VA_LIST_SLOT_BYTES) * VA_LIST_SLOT_BYTES + VA_LIST_SLOT_BYTES;
+			}
+		}
 
-        @Override
-        public Builder addVarg(ValueLayout.OfLong layout, long value) {
-            throw new InternalError("addVarg() is not yet implemented"); //$NON-NLS-1$
-        }
+		return argLayoutSize;
+	}
 
-        @Override
-        public Builder addVarg(ValueLayout.OfDouble layout, double value) {
-            throw new InternalError("addVarg() is not yet implemented"); //$NON-NLS-1$
-        }
+	@Override
+	public void skip(MemoryLayout... layouts) {
+		Objects.requireNonNull(layouts);
+		((ResourceScopeImpl)scope).checkValidStateSlow();
 
-        @Override
-        public Builder addVarg(ValueLayout.OfAddress layout, Addressable value) {
-            throw new InternalError("addVarg() is not yet implemented"); //$NON-NLS-1$
-        }
+		for (MemoryLayout layout : layouts) {
+			Objects.requireNonNull(layout);
+			long argByteSize = getAlignedArgSize(layout);
+			/* Skip to the next argument in the va_list buffer */
+			segment = segment.asSlice(argByteSize);
+		}
+	}
 
-        @Override
-        public Builder addVarg(GroupLayout layout, MemorySegment value) {
-            throw new InternalError("addVarg() is not yet implemented"); //$NON-NLS-1$
-        }
+	public static VaList ofAddress(MemoryAddress addr, ResourceScope scope) {
+		MemorySegment segment = MemorySegment.ofAddress(addr, Long.MAX_VALUE, scope);
+		return new SysVPPC64leVaList(segment, scope);
+	}
 
-        public VaList build() {
-            throw new InternalError("build() is not yet implemented"); //$NON-NLS-1$
-        }
-    }
+	@Override
+	public ResourceScope scope() {
+		return scope;
+	}
+
+	@Override
+	public VaList copy() {
+		((ResourceScopeImpl)scope).checkValidStateSlow();
+		return new SysVPPC64leVaList(segment, scope);
+	}
+
+	@Override
+	public MemoryAddress address() {
+		return segment.address();
+	}
+
+	@Override
+	public String toString() {
+		return "SysVPPC64leVaList{" + segment.address() + '}';
+	}
+
+	static Builder builder(ResourceScope scope) {
+		return new Builder(scope);
+	}
+
+	public static non-sealed class Builder implements VaList.Builder {
+		private final ResourceScope scope;
+		private final List<SimpleVaArg> stackArgs = new ArrayList<>();
+
+		public Builder(ResourceScope scope) {
+			((ResourceScopeImpl)scope).checkValidStateSlow();
+			this.scope = scope;
+		}
+
+		private Builder setArg(MemoryLayout layout, Object value) {
+			Objects.requireNonNull(layout);
+			Objects.requireNonNull(value);
+			stackArgs.add(new SimpleVaArg(TypeClass.classifyCarrier(layout), layout, value));
+			return this;
+		}
+
+		@Override
+		public Builder addVarg(ValueLayout.OfInt layout, int value) {
+			return setArg(layout, value);
+		}
+
+		@Override
+		public Builder addVarg(ValueLayout.OfLong layout, long value) {
+			return setArg(layout, value);
+		}
+
+		@Override
+		public Builder addVarg(ValueLayout.OfDouble layout, double value) {
+			return setArg(layout, value);
+		}
+
+		@Override
+		public Builder addVarg(ValueLayout.OfAddress layout, Addressable value) {
+			return setArg(layout, value.address());
+		}
+
+		@Override
+		public Builder addVarg(GroupLayout layout, MemorySegment value) {
+			return setArg(layout, value);
+		}
+
+		public VaList build() {
+			if (stackArgs.isEmpty()) {
+				return EMPTY;
+			}
+
+			/* All primitves/pointer (aligned with 8 bytes) are directly stored in the va_list buffer
+			 * and all elements of stuct are totally copied to the va_list buffer (instead of storing
+			 * the va_list address), in which  case we need to calculate the total byte size of the
+			 * buffer to be allocated for va_list.
+			 */
+			long totalArgsSize = stackArgs.stream().reduce(0L,
+					(accum, arg) -> accum + getAlignedArgSize(arg.layout), Long::sum);
+			SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
+			MemorySegment segment = allocator.allocate(totalArgsSize);
+			MemorySegment cursorSegment = segment;
+
+			for (SimpleVaArg arg : stackArgs) {
+				MemoryLayout argLayout = arg.layout;
+				TypeClass typeClass = TypeClass.classifyLayout(argLayout);
+
+				switch (typeClass) {
+					case BASE, POINTER -> {
+						VarHandle argHandle = TypeClass.classifyVarHandle((ValueLayout)argLayout);
+						argHandle.set(cursorSegment, arg.value);
+					}
+					case STRUCT -> {
+						cursorSegment.copyFrom((MemorySegment)(arg.value));
+					}
+					default -> throw new IllegalStateException("Unsupported TypeClass: " + typeClass);
+				}
+				/* Move to the next argument by the aligned size of the current argument */
+				cursorSegment = cursorSegment.asSlice(getAlignedArgSize(argLayout));
+			}
+			return new SysVPPC64leVaList(segment, scope);
+		}
+	}
 }
